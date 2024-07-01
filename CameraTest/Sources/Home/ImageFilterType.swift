@@ -38,7 +38,7 @@ enum ImageFilterType: String, CaseIterable {
         case .hue:
             "CIHueAdjust"
         case .sharpness:
-            "CISharpenLuminance"
+            "CIVibrance"
         }
     }
     
@@ -65,7 +65,7 @@ enum ImageFilterType: String, CaseIterable {
         case .hue:
             kCIInputAngleKey
         case .sharpness:
-            kCIInputSharpnessKey
+            "inputAmount"
         }
     }
 }
