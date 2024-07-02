@@ -10,7 +10,7 @@ import UIKit
 enum ImageFilterType: String, CaseIterable {
     case brightness = "휘도" // 휘도
     case exposure = "노출" // 노출
-    case highlights = "하이라이트" // 하이라이트
+    case highlights = "하이라이트" // 하이라이트 - default = 1
     case shadows = "그림자" // 그림자
     case contrast = "대비" // 대비
 //    case blackPoint // 블랙포인트 - 블랙포인트를 포함한 전체톤을 조절하기 위해 사용
@@ -38,7 +38,7 @@ enum ImageFilterType: String, CaseIterable {
         case .hue:
             "CIHueAdjust"
         case .sharpness:
-            "CIVibrance"
+            "CIVibrance" // 이게 찐 색 선명도 -1 ~ 1
         }
     }
     

@@ -3,12 +3,13 @@ import SnapKit
 import Then
 import Combine
 import CombineCocoa
+import CoreImage
 
 extension HomeViewController {
     enum Constant {
         static var sliderInitialValue: Float = 0.0
-        static var sliderMinimumValue: Float = -0.1
-        static var sliderMaximumValue: Float = 0.1
+        static var sliderMinimumValue: Float = -1
+        static var sliderMaximumValue: Float = 1
         
         static func filterValue(type: ImageFilterType, with sliderValue: Float = 0.0) -> String { type.rawValue + ": " + String(format: "%.2f", sliderValue) }
     }
@@ -22,7 +23,8 @@ final class HomeViewController: UIViewController {
     let contentView = UIView()
     
     let sampleImageView: UIImageView = UIImageView().then {
-        $0.backgroundColor = .black
+        $0.contentMode = .scaleAspectFill
+//        $0.backgroundColor = .black
     }
     
     let albumButton = UIButton().then {
@@ -143,7 +145,8 @@ extension HomeViewController {
                     self.brightness = value
                     sliderValue.text = Constant.filterValue(type: filter, with: value)
                     
-                    self.adjustBrightness(of: self.originalImage, brightness: self.brightness)
+                    adjustLuminance(of: self.originalImage, luminance: CGFloat(value))
+                    print("::: > \(value)")
                 }
                 .store(in: &cancellables)
             
@@ -159,10 +162,7 @@ extension HomeViewController: UIImagePickerControllerDelegate & UINavigationCont
             originalImage = image  // 원본 이미지 저장
             sliders.forEach { $0.value = Constant.sliderInitialValue }
             
-//            adjustBrightness(of: image, brightness: brightness)  // 초기 밝기 조정
-            adjustBrightness(of: image, brightness: 0.05)
-            adjustVibrance(of: sampleImageView.image, vibrance: 0.065)
-            adjustHighlight(of: sampleImageView.image, amount: -0.02)
+            adjustLuminance(of: image, luminance: 0)
         }
         dismiss(animated: true, completion: nil)
     }
@@ -172,7 +172,9 @@ extension HomeViewController: UIImagePickerControllerDelegate & UINavigationCont
         
         let filter = CIFilter(name: "CIColorControls")
         filter?.setValue(ciImage, forKey: kCIInputImageKey)
-        filter?.setValue(brightness, forKey: kCIInputBrightnessKey)  // 휘도 조정
+        filter?.setValue(brightness, forKey: kCIInputBrightnessKey)  // 0.0 ~ 1.0 범위
+        filter?.setValue(1.0, forKey: kCIInputContrastKey)  // 대비: 0.0 ~ 4.0
+        filter?.setValue(1.0, forKey: kCIInputSaturationKey)  // 채도: 0.0 ~ 2.0
         
         if let outputImage = filter?.outputImage {
             let context = CIContext(options: nil)
@@ -183,7 +185,37 @@ extension HomeViewController: UIImagePickerControllerDelegate & UINavigationCont
         }
     }
     
-    private func adjustVibrance(of image: UIImage?, vibrance: Float) {
+    func adjustLuminance(of image: UIImage?, luminance: CGFloat) {
+        guard let ciImage = CIImage(image: image ?? UIImage()) else { return }
+        let normalizedLuminance = luminance
+        
+        // 어두운 부분을 밝히기 위해 노출 조정
+        let exposureAdjust = CIFilter(name: "CIExposureAdjust")!
+        exposureAdjust.setValue(ciImage, forKey: kCIInputImageKey)
+        exposureAdjust.setValue(normalizedLuminance * 0.5, forKey: kCIInputEVKey)
+        guard let exposureAdjusted = exposureAdjust.outputImage else { return }
+        
+        // 하이라이트 추가 및 섀도우 조정
+        let highlightShadowAdjust = CIFilter(name: "CIHighlightShadowAdjust")!
+        highlightShadowAdjust.setValue(exposureAdjusted, forKey: kCIInputImageKey)
+        highlightShadowAdjust.setValue(1 + (normalizedLuminance * 0.75), forKey: "inputHighlightAmount")
+        highlightShadowAdjust.setValue(normalizedLuminance * 0.5, forKey: "inputShadowAmount")
+        guard let highlightShadowAdjusted = highlightShadowAdjust.outputImage else { return }
+        
+        // 대비 조정
+        let colorControls = CIFilter(name: "CIColorControls")!
+        colorControls.setValue(highlightShadowAdjusted, forKey: kCIInputImageKey)
+        colorControls.setValue(1 + (normalizedLuminance * 0.1), forKey: kCIInputContrastKey)
+        guard let contrastAdjusted = colorControls.outputImage else { return }
+        
+        let context = CIContext(options: nil)
+        if let cgImage = context.createCGImage(contrastAdjusted, from: contrastAdjusted.extent) {
+            let processedImage = UIImage(cgImage: cgImage)
+            sampleImageView.image = processedImage
+        }
+    }
+    
+    private func adjustVibrance(of image: UIImage?, vibrance: CGFloat) {
         guard let ciImage = CIImage(image: image ?? UIImage()) else { return }
         
         let filter = CIFilter(name: "CIVibrance")
@@ -196,7 +228,6 @@ extension HomeViewController: UIImagePickerControllerDelegate & UINavigationCont
         guard let cgImage = context.createCGImage(outputImage, from: outputImage.extent) else { return }
         
         sampleImageView.image = UIImage(cgImage: cgImage)
-//        return UIImage(cgImage: cgImage)
     }
     
     private func adjustHighlight(of image: UIImage?, amount: Float) {
@@ -212,19 +243,5 @@ extension HomeViewController: UIImagePickerControllerDelegate & UINavigationCont
         guard let cgImage = context.createCGImage(outputImage, from: outputImage.extent) else { return }
         
         sampleImageView.image = UIImage(cgImage: cgImage)
-//        return UIImage(cgImage: cgImage)
     }
 }
-
-
-//MARK: 하이라이트
-//let highlightShadowFilter = CIFilter(name: "CIHighlightShadowAdjust")
-//highlightShadowFilter?.setValue(inputImage, forKey: kCIInputImageKey)
-//highlightShadowFilter?.setValue(1.0, forKey: "inputHighlightAmount")  // 조정할 하이라이트 양
-
-//MARK: 색 선명도
-//let whitePointAdjustFilter = CIFilter(name: "CIWhitePointAdjust")
-//whitePointAdjustFilter?.setValue(inputImage, forKey: kCIInputImageKey)
-//whitePointAdjustFilter?.setValue(CIColor(red: 1.1, green: 1.0, blue: 0.9), forKey: "inputColor")  // 색선명도 조정
-
-
